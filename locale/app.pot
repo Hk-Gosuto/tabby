@@ -1285,3 +1285,31 @@ msgstr ""
 #: tabby-terminal/src/hotkeys.ts:58
 msgid "Zoom out"
 msgstr ""
+
+#: Touch ID vault
+msgid "Could not update Touch ID settings"
+msgstr ""
+
+#: Touch ID vault
+msgid "This build needs valid Apple signing and Keychain entitlements. Use the master passphrase."
+msgstr ""
+
+#: Touch ID vault
+msgid "Touch ID was cancelled, failed, or is not available. Enter the master passphrase."
+msgstr ""
+
+#: Touch ID vault
+msgid "Touch ID has expired. Enter the master passphrase."
+msgstr ""
+
+#: Touch ID vault
+msgid "Touch ID must be enabled again with the master passphrase."
+msgstr ""
+
+#: Touch ID vault
+msgid "The protected Keychain operation failed. Use the master passphrase."
+msgstr ""
+
+#: Touch ID vault
+msgid "The master passphrase is kept in memory only. Closing Tabby requires unlocking the vault again."
+msgstr ""

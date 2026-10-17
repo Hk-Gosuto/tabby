@@ -55,7 +55,7 @@ export class VaultSettingsTabComponent extends BaseComponent {
         } catch (e) {
             this.touchIdEnabled = this.biometrics.getSettings().enabled
             console.error('Failed to enable Touch ID:', e)
-            this.notifications.error(this.translate.instant('Failed to enable Touch ID'), e.message)
+            this.notifications.error(this.translate.instant('Failed to enable Touch ID'), this.translate.instant(this.biometrics.getErrorMessage(e)))
         }
     }
 

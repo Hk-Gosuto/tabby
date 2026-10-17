@@ -2572,3 +2572,75 @@ msgctxt "[Dynamic] port forwarding"
 msgid "id.port-forwarding.dynamic"
 msgstr "動態通訊埠轉發"
 
+
+#: Touch ID vault
+msgid "Use Touch ID to unlock"
+msgstr "使用 Touch ID 解鎖"
+
+#: Touch ID vault
+msgid "Unlock the vault using Touch ID instead of entering the passphrase"
+msgstr "使用 Touch ID 解鎖保險庫，無需輸入主密碼"
+
+#: Touch ID vault
+msgid "Require the passphrase every"
+msgstr "要求重新輸入主密碼的間隔"
+
+#: Touch ID vault
+msgid "Touch ID stops working this many days after the passphrase was last entered"
+msgstr "距離上次輸入主密碼超過指定天數後，需要重新輸入主密碼"
+
+#: Touch ID vault
+msgid "Require the passphrase after the computer restarts"
+msgstr "電腦重新啟動後要求輸入主密碼"
+
+#: Touch ID vault
+msgid "Touch ID only works once the passphrase has been entered since the last restart"
+msgstr "每次電腦重新啟動後，需先輸入一次主密碼才能使用 Touch ID"
+
+#: Touch ID vault
+msgid "Unlock with Touch ID"
+msgstr "使用 Touch ID 解鎖"
+
+#: Touch ID vault
+msgid "Touch ID has expired. Please enter your passphrase."
+msgstr "Touch ID 解鎖已到期，請輸入主密碼。"
+
+#: Touch ID vault
+msgid "or enter passphrase"
+msgstr "或輸入主密碼"
+
+#: Touch ID vault
+msgid "Failed to enable Touch ID"
+msgstr "無法啟用 Touch ID"
+
+#: Touch ID vault
+msgid "Could not update Touch ID settings"
+msgstr "無法更新 Touch ID 設定"
+
+#: Touch ID vault
+msgid "This build needs valid Apple signing and Keychain entitlements. Use the master passphrase."
+msgstr "此版本缺少有效的 Apple 簽章或鑰匙圈存取權限，無法使用 Touch ID。請使用主密碼解鎖。"
+
+#: Touch ID vault
+msgid "Touch ID was cancelled, failed, or is not available. Enter the master passphrase."
+msgstr "Touch ID 驗證已取消、失敗或無法使用，請輸入主密碼。"
+
+#: Touch ID vault
+msgid "Touch ID has expired. Enter the master passphrase."
+msgstr "Touch ID 解鎖已到期，請輸入主密碼。"
+
+#: Touch ID vault
+msgid "Touch ID must be enabled again with the master passphrase."
+msgstr "請使用主密碼重新啟用 Touch ID。"
+
+#: Touch ID vault
+msgid "The protected Keychain operation failed. Use the master passphrase."
+msgstr "受保護的鑰匙圈操作失敗，請使用主密碼解鎖。"
+
+#: Touch ID vault
+msgid "The master passphrase is kept in memory only. Closing Tabby requires unlocking the vault again."
+msgstr "主密碼僅保存在記憶體中，關閉 Tabby 後需要重新解鎖保險庫。"
+
+#: Touch ID vault
+msgid "days"
+msgstr "天"

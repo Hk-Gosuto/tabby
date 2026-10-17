@@ -93,3 +93,13 @@ test('invalid saved state does not crash the unlock dialog', () => {
         assert.equal(harness(state).service.canUnlock(), false)
     }
 })
+
+test('biometric errors have stable user messages without leaking IPC details', () => {
+    const { service } = harness()
+    assert.equal(service.getErrorMessage(new Error("Error invoking remote method 'app:vault-biometric-store': Error: This build needs valid Apple signing and Keychain entitlements. Use the master passphrase.")),
+        'This build needs valid Apple signing and Keychain entitlements. Use the master passphrase.')
+    assert.equal(service.getErrorMessage({ message: 'CACHE_EXPIRED' }), 'Touch ID has expired. Enter the master passphrase.')
+    assert.equal(service.getErrorMessage({ message: 'AUTH_REQUIRED' }), 'Touch ID was cancelled, failed, or is not available. Enter the master passphrase.')
+    assert.equal(service.getErrorMessage({ message: 'CACHE_MISSING' }), 'Touch ID must be enabled again with the master passphrase.')
+    assert.equal(service.getErrorMessage({ message: 'unexpected internal details' }), 'The protected Keychain operation failed. Use the master passphrase.')
+})

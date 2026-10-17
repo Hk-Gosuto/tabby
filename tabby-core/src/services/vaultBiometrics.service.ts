@@ -62,6 +62,24 @@ export class VaultBiometricsService {
         return this.platform.isBiometricAuthAvailable()
     }
 
+    /** Return a stable, translatable message without exposing the Electron IPC wrapper. */
+    getErrorMessage (error: unknown): string {
+        const message = error instanceof Error ? error.message : String((error as any)?.message ?? '')
+        if (/SIGNING_REQUIRED|valid Apple signing and Keychain entitlements/.test(message)) {
+            return 'This build needs valid Apple signing and Keychain entitlements. Use the master passphrase.'
+        }
+        if (/AUTH_REQUIRED|cancelled|canceled|authentication failed/i.test(message)) {
+            return 'Touch ID was cancelled, failed, or is not available. Enter the master passphrase.'
+        }
+        if (/CACHE_EXPIRED|expired/.test(message)) {
+            return 'Touch ID has expired. Enter the master passphrase.'
+        }
+        if (/CACHE_MISSING|enabled again/.test(message)) {
+            return 'Touch ID must be enabled again with the master passphrase.'
+        }
+        return 'The protected Keychain operation failed. Use the master passphrase.'
+    }
+
     getSettings (): VaultBiometricsSettings {
         const { enabled, expireDays, expireOnRestart } = this.load()
         return { enabled, expireDays, expireOnRestart }

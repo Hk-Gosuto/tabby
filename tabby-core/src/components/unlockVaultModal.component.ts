@@ -1,5 +1,6 @@
 import { Component, ViewChild, ElementRef } from '@angular/core'
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap'
+import { TranslateService } from '@ngx-translate/core'
 import { VaultBiometricsService } from '../services/vaultBiometrics.service'
 
 /** @hidden */
@@ -18,6 +19,7 @@ export class UnlockVaultModalComponent {
     constructor (
         private modalInstance: NgbActiveModal,
         private biometrics: VaultBiometricsService,
+        private translate: TranslateService,
     ) { }
 
     async ngOnInit (): Promise<void> {
@@ -46,7 +48,7 @@ export class UnlockVaultModalComponent {
             this.close(await this.biometrics.unlock(), true)
         } catch (e) {
             // Cancelled, or the stored passphrase could not be used
-            this.touchIdError = e.message
+            this.touchIdError = this.translate.instant(this.biometrics.getErrorMessage(e))
             this.canUseTouchId = this.biometrics.canUnlock()
         }
     }
