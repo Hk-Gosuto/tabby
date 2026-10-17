@@ -5,11 +5,11 @@ if (team) {
     const source = fs.readFileSync('build/mac/entitlements.plist', 'utf8')
     const extra = `
     <key>com.apple.application-identifier</key>
-    <string>${team}.org.tabby.touchid-test</string>
+    <string>${team}.org.tabby</string>
     <key>com.apple.developer.team-identifier</key>
     <string>${team}</string>
     <key>keychain-access-groups</key>
-    <array><string>${team}.org.tabby.touchid-test</string></array>
+    <array><string>${team}.org.tabby</string></array>
 `
     fs.writeFileSync('build/mac/touchid-entitlements.plist', source.replace('</dict>', `${extra}</dict>`))
 }

@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-const info = `Tabby Touch ID experimental build
+const info = `Tabby experimental build
 Commit: ${process.env.GITHUB_SHA || 'local'}
 Architecture: ${process.env.ARCH || process.arch}
 Version: ${process.env.TABBY_VERSION || 'development'}

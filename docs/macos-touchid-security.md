@@ -36,10 +36,9 @@ disabled caches cannot revoke old backups that already contain secrets.
 
 ## Builds and signing
 
-The fork's build uses a separate application name, bundle ID and data directory
-(`Tabby Touch ID`, `org.tabby.touchid-test`) and disables the official updater.
-It does not automatically import the official app's configuration or plugins.
-Copy only a backup of `config.yaml` into the test directory if needed.
+The build retains upstream's application name (`Tabby`), bundle ID (`org.tabby`),
+URL scheme, configuration/plugin directories and automatic updater behavior.
+It uses the existing Tabby configuration. Back it up before installing this build.
 
 The workflow builds macOS arm64/x86_64, Windows x64/arm64, and Linux
 x64/arm64/armv7l using upstream's package pipeline. It publishes a prerelease
@@ -60,7 +59,7 @@ valid Apple signing material as repository Actions secrets:
 - `CSC_KEY_PASSWORD`: its password.
 - `APPLE_TEAM_ID`: the matching ten-character team ID.
 - `MACOS_PROVISION_PROFILE`: base64 provisioning profile authorizing
-  `<TEAM_ID>.org.tabby.touchid-test` and the matching Keychain access group,
+  `<TEAM_ID>.org.tabby` and the matching Keychain access group,
   when required by that signing identity.
 - Optional notarization: `APPSTORE_USERNAME`, `APPSTORE_PASSWORD`.
 
@@ -71,8 +70,8 @@ Apple identities/profiles may require adjusting the application identifier;
 the current helper deliberately uses one fixed ID.
 
 ```sh
-codesign --verify --deep --strict '/Applications/Tabby Touch ID.app'
-codesign -d --entitlements :- '/Applications/Tabby Touch ID.app'
+codesign --verify --deep --strict '/Applications/Tabby.app'
+codesign -d --entitlements :- '/Applications/Tabby.app'
 ```
 
 ## Validation

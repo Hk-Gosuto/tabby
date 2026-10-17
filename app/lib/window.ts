@@ -1,4 +1,5 @@
 import * as glasstron from 'glasstron'
+import { autoUpdater } from 'electron-updater'
 import { Subject, Observable, debounceTime } from 'rxjs'
 import { BrowserWindow, app, ipcMain, Rectangle, Menu, screen, BrowserWindowConstructorOptions, TouchBar, nativeImage, WebContents, nativeTheme } from 'electron'
 import ElectronConfig = require('electron-config')
@@ -527,7 +528,32 @@ export class Window {
     }
 
     private setupUpdater () {
-        // Community builds are distributed through this fork's Releases only.
+        autoUpdater.autoDownload = true
+        autoUpdater.autoInstallOnAppQuit = true
+
+        autoUpdater.on('update-available', () => {
+            this.send('updater:update-available')
+        })
+
+        autoUpdater.on('update-not-available', () => {
+            this.send('updater:update-not-available')
+        })
+
+        autoUpdater.on('error', err => {
+            this.send('updater:error', err)
+        })
+
+        autoUpdater.on('update-downloaded', () => {
+            this.send('updater:update-downloaded')
+        })
+
+        this.on('updater:check-for-updates', () => {
+            autoUpdater.checkForUpdates()
+        })
+
+        this.on('updater:quit-and-install', () => {
+            autoUpdater.quitAndInstall()
+        })
     }
 
     private destroy () {

@@ -6,10 +6,10 @@ import { spawnSync } from 'node:child_process'
 if (process.platform !== 'darwin') throw new Error('Packaged app startup checks require macOS')
 const bundles = fs.readdirSync('dist', { withFileTypes: true })
     .filter(entry => entry.isDirectory())
-    .map(entry => path.join('dist', entry.name, 'Tabby Touch ID.app'))
+    .map(entry => path.join('dist', entry.name, 'Tabby.app'))
     .filter(bundle => fs.existsSync(bundle))
 if (bundles.length !== 1) throw new Error('Expected exactly one packaged macOS app')
-const executable = path.resolve(bundles[0], 'Contents/MacOS/Tabby Touch ID')
+const executable = path.resolve(bundles[0], 'Contents/MacOS/Tabby')
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'tabby-startup-'))
 try {
     const config = path.join(temporary, 'config')

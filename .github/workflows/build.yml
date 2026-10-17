@@ -631,4 +631,4 @@ jobs:
         GH_REPO: ${{ github.repository }}
       shell: bash
       run: |
-        gh release create "v$TABBY_VERSION" release-upload/* --target "$GITHUB_SHA" --prerelease --title "Tabby Touch ID $TABBY_VERSION" --notes-file docs/touchid-release-notes.md
+        gh release create "v$TABBY_VERSION" release-upload/* --target "$GITHUB_SHA" --prerelease --title "Tabby $TABBY_VERSION" --notes-file docs/touchid-release-notes.md
