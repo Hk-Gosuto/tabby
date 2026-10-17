@@ -15,6 +15,27 @@ concurrency:
   group: packages-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  Keychain-Native:
+    name: Native Keychain (${{matrix.arch}})
+    runs-on: ${{matrix.runner}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    env:
+      ARCH: ${{matrix.arch}}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - run: node scripts/build-vault-keychain.mjs
+    - run: node scripts/test-vault-keychain-native.mjs
+
   Lint:
     runs-on: ubuntu-24.04
 
@@ -578,7 +599,7 @@ jobs:
 
   release:
     name: Publish fork prerelease
-    needs: [macOS-Build, Linux-Build, Windows-Build]
+    needs: [Keychain-Native, macOS-Build, Linux-Build, Windows-Build]
     if: github.repository == 'Hk-Gosuto/tabby' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:

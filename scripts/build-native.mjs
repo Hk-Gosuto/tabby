@@ -20,7 +20,7 @@ for (let dir of ['app', 'tabby-core', 'tabby-local', 'tabby-ssh', 'tabby-termina
     const build = rebuild({
         buildPath: path.resolve(__dirname, '../' + dir),
         electronVersion: vars.electronVersion,
-        arch: process.env.ARCH,
+        arch: process.env.ARCH === 'x86_64' ? 'x64' : process.env.ARCH,
         force: true,
     })
     build.catch(e => {

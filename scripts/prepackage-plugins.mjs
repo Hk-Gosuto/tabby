@@ -30,7 +30,7 @@ vars.builtinPlugins.forEach(plugin => {
         rebuild({
             buildPath: path.resolve('.'),
             electronVersion: vars.electronVersion,
-            arch: process.env.ARCH ?? process.arch,
+            arch: process.env.ARCH === 'x86_64' ? 'x64' : process.env.ARCH ?? process.arch,
             force: true,
             useCache: false,
         })
