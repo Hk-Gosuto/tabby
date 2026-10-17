@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
@@ -22,6 +24,12 @@ builder({
     x64: process.env.ARCH === 'x86_64',
     arm64: process.env.ARCH === 'arm64',
     config: {
+        afterPack: async context => {
+            const profile = 'build/mac/touchid.provisionprofile'
+            if (fs.existsSync(profile)) {
+                fs.copyFileSync(profile, path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents/embedded.provisionprofile'))
+            }
+        },
         extraMetadata: {
             version: vars.version,
             teamId: process.env.APPLE_TEAM_ID,
@@ -29,7 +37,8 @@ builder({
         forceCodeSigning: !!process.env.CSC_LINK,
         mac: {
             identity: !process.env.CI || process.env.CSC_LINK ? undefined : null,
-            notarize: !!process.env.APPLE_TEAM_ID,
+            entitlements: fs.existsSync('build/mac/touchid-entitlements.plist') ? 'build/mac/touchid-entitlements.plist' : 'build/mac/entitlements.plist',
+            notarize: !!(process.env.APPLE_TEAM_ID && process.env.APPSTORE_USERNAME && process.env.APPSTORE_PASSWORD),
         },
         npmRebuild: process.env.ARCH !== 'arm64',
         publish: process.env.KEYGEN_TOKEN ? [

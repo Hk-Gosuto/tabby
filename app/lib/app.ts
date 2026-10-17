@@ -1,4 +1,4 @@
-import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstructorOptions, WebContents, safeStorage } from 'electron'
+import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstructorOptions, WebContents } from 'electron'
 import promiseIpc from 'electron-promise-ipc'
 import * as remote from '@electron/remote/main'
 import { spawnSync } from 'child_process'
@@ -12,6 +12,7 @@ import { Window, WindowOptions } from './window'
 import { pluginManager } from './pluginManager'
 import { PTYManager } from './pty'
 import { logMainError } from './errors'
+import { registerVaultBiometrics, ProtectedVaultBinding } from './vaultBiometrics'
 
 export class Application {
     private tray?: Tray
@@ -38,13 +39,17 @@ export class Application {
             this.broadcastExcept('host:config-change', event.sender, config)
         })
 
-        // Lets the vault keep its passphrase for Touch ID unlock
-        ipcMain.handle('app:safe-storage-encrypt', async (_event, plainText: string) => {
-            return (await safeStorage.encryptStringAsync(plainText)).toString('base64')
-        })
-
-        ipcMain.handle('app:safe-storage-decrypt', async (_event, encrypted: string) => {
-            return (await safeStorage.decryptStringAsync(Buffer.from(encrypted, 'base64'))).result
+        let vaultBinding: ProtectedVaultBinding | undefined
+        registerVaultBiometrics(ipcMain, event => this.windows.some(w => w.webContents === event.sender), () => {
+            if (process.platform !== 'darwin') {
+                throw new Error('Protected Touch ID unlock is only available on macOS')
+            }
+            if (!vaultBinding) {
+                const nativeModule = { exports: {} }
+                process.dlopen(nativeModule as any, path.join(app.getAppPath().replace(/\.asar$/, '.asar.unpacked'), 'native/vault-keychain.node'))
+                vaultBinding = nativeModule.exports as ProtectedVaultBinding
+            }
+            return vaultBinding
         })
 
         ipcMain.on('app:register-global-hotkey', (_event, specs) => {

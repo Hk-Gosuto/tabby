@@ -132,8 +132,8 @@ export class VaultService {
                 await this.save(migrateVaultContent({}), passphrase)
             }
         } else {
+            await this.biometrics.disable()
             this.store = null
-            this.biometrics.disable()
             this.contentChanged.next()
         }
     }
@@ -159,14 +159,14 @@ export class VaultService {
             const vault = await wrapPromise(this.zone, decryptVault(storage, passphrase))
             if (unverified && !unverified.fromBiometrics) {
                 // Entering the right passphrase restarts the Touch ID expiry period
-                this.biometrics.storePassphrase(passphrase)
+                await this.biometrics.storePassphrase(passphrase)
             }
             return vault
         } catch (e) {
             this.forgetPassphrase()
             if (unverified?.fromBiometrics) {
                 // The passphrase stored for Touch ID is outdated
-                this.biometrics.forgetPassphrase()
+                await this.biometrics.forgetPassphrase()
             }
             if (e.toString().includes('BAD_DECRYPT')) {
                 this.notifications.error('Incorrect passphrase')

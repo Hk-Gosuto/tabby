@@ -1,12 +1,12 @@
 ---
-appId: org.tabby
-productName: Tabby
+appId: org.tabby.touchid-test
+productName: Tabby Touch ID
 compression: normal
 npmRebuild: false
 protocols:
   - name: Tabby URL
     schemes:
-      - tabby
+      - tabby-touchid
 files:
 - '**/*'
 - dist
@@ -40,6 +40,7 @@ extraResources:
 - builtin-plugins
 - extras
 asarUnpack:
+- native/*.node
 - 'dist/*.map'
 - node_modules/keytar/build/Release/*.node
 - node_modules/**/*.node

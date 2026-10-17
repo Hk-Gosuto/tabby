@@ -1,5 +1,20 @@
 name: Package-Build
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, fix/macos-touchid-keychain]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  TABBY_VERSION: 1.0.239-touchid.${{ github.run_number }}
+  REV: ${{ github.run_number }}
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   Lint:
     runs-on: ubuntu-24.04
@@ -25,6 +40,12 @@ jobs:
         rm app/node_modules/.yarn-integrity
         yarn
 
+    - name: Vault security regression tests
+      run: |
+        node --test app/test/vaultBiometrics*.test.mjs
+        c++ -std=c++17 -Wall -Wextra -Werror native/vault-keychain/policy.test.cpp -o /tmp/vault-policy-test
+        /tmp/vault-policy-test
+
     - name: Test SSH TERM
       run: yarn run test:ssh-term
 
@@ -38,14 +59,16 @@ jobs:
       run: yarn run lint
 
   macOS-Build:
-    runs-on: macos-15
+    runs-on: ${{matrix.runner}}
     needs: Lint
     strategy:
       matrix:
         include:
           - arch: x86_64
+            runner: macos-15-intel
             rust_triple: x86_64-apple-darwin
           - arch: arm64
+            runner: macos-15
             rust_triple: aarch64-apple-darwin
       fail-fast: false
 
@@ -72,6 +95,15 @@ jobs:
       env:
         ARCH: ${{matrix.arch}}
 
+    - name: Check native Keychain module
+      run: node scripts/test-vault-keychain-native.mjs
+
+    - name: Prepare optional signing
+      run: node scripts/prepare-touchid-signing.mjs
+      env:
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        MACOS_PROVISION_PROFILE: ${{ secrets.MACOS_PROVISION_PROFILE }}
+
     - name: Webpack
       run: yarn run build
 
@@ -83,31 +115,30 @@ jobs:
     - run: sed -i '' 's/updateInfo = await/\/\/updateInfo = await/g' node_modules/app-builder-lib/out/targets/ArchiveTarget.js
 
     # Work around electron-builder beta bug
-    - run: ln -s ../../node_modules/electron app/node_modules
+    - run: test -e app/node_modules/electron || ln -s ../../node_modules/electron app/node_modules/electron
 
-    - name: Build and sign packages
-      run: scripts/build-macos.mjs
-      if: github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags'))
+    - name: Build macOS packages
+      run: node scripts/build-macos.mjs
       env:
-        ARCH: ${{matrix.arch}}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        KEYGEN_TOKEN: ${{ secrets.KEYGEN_TOKEN }}
         CSC_LINK: ${{ secrets.CSC_LINK }}
         CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         APPSTORE_USERNAME: ${{ secrets.APPSTORE_USERNAME }}
         APPSTORE_PASSWORD: ${{ secrets.APPSTORE_PASSWORD }}
         USE_HARD_LINKS: false
-        # DEBUG: electron-builder,electron-builder:*
 
-    - name: Build packages without signing
-      run: scripts/build-macos.mjs
-      if: "! (github.event_name == 'push' && (github.ref_protected || startsWith(github.ref, 'refs/tags')))"
+    - name: Record macOS build information
+      run: node scripts/touchid-build-info.mjs
       env:
-        ARCH: ${{matrix.arch}}
-        # DEBUG: electron-builder,electron-builder:*
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: macOS build information (${{matrix.arch}})
+        path: dist/TOUCHID-BUILD-INFO.txt
 
     - name: Upload symbols
+      if: github.repository == 'Eugeny/tabby'
       run: |
         sudo npm install -g @sentry/cli --unsafe-perm
         ./scripts/sentry-upload.mjs
@@ -123,13 +154,13 @@ jobs:
         mkdir artifact-zip
         mv dist/*.zip artifact-zip/
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload DMG
       with:
         name: macOS .dmg (${{matrix.arch}})
         path: artifact-dmg
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload ZIP
       with:
         name: macOS .zip (${{matrix.arch}})
@@ -186,10 +217,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install libfontconfig1-dev libarchive-tools zsh crossbuild-essential-${{matrix.arch}}
-
-    - name: Setup tar to run as root
-      run: sudo chmod u+s "$(command -v tar)"
-      if: matrix.build-arch == 'arm'
 
     - name: Download cached sysroot
       uses: actions/cache@v3
@@ -249,7 +276,7 @@ jobs:
       run: |
         sudo npm install -g @sentry/cli --unsafe-perm
         ./scripts/sentry-upload.mjs
-      if: matrix.build-arch == 'x64'
+      if: github.repository == 'Eugeny/tabby' && matrix.build-arch == 'x64'
       env:
         SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -257,7 +284,7 @@ jobs:
 
     - name: Upload packages to packagecloud.io
       uses: TykTechnologies/packagecloud-action@7add92bc6a06914be404cf7fa00a6ccb302e6ac5 # main
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      if: github.repository == 'Eugeny/tabby' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       env:
         PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
       with:
@@ -266,37 +293,37 @@ jobs:
         rpmvers: 'el/9 el/8 ol/6 ol/7'
         debvers: 'ubuntu/bionic ubuntu/focal ubuntu/hirsute ubuntu/impish ubuntu/jammy ubuntu/kinetic ubuntu/noble ubuntu/oracular debian/jessie debian/stretch debian/buster debian/bullseye debian/bookworm debian/trixie debian/forky debian/duke debian/forky debian/sid'
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload AppImage (${{matrix.arch}})
       with:
         name: Linux AppImage (${{matrix.arch}})
         path: dist/*.AppImage
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload DEB (${{matrix.arch}})
       with:
         name: Linux DEB (${{matrix.arch}})
         path: dist/*.deb
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload RPM (${{matrix.arch}})
       with:
         name: Linux RPM (${{matrix.arch}})
         path: dist/*.rpm
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload Pacman Package (${{matrix.arch}})
       with:
         name: Linux Pacman (${{matrix.arch}})
         path: dist/*.pacman
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload Linux tarball (${{matrix.arch}})
       with:
         name: Linux tarball (${{matrix.arch}})
         path: dist/*.tar.gz
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload web tarball (amd64 only)
       with:
         name: Web tarball
@@ -337,7 +364,7 @@ jobs:
         echo "PATH=$newPath" >> $env:GITHUB_ENV
 
     - name: Decode certificate
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags'))
+      if: github.repository == 'Eugeny/tabby' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
       env:
         SM_CLIENT_CERT_FILE_B64: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
       run: |
@@ -347,7 +374,7 @@ jobs:
       shell: bash
 
     - name: Setup Software Trust Manager
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags'))
+      if: github.repository == 'Eugeny/tabby' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
       uses: digicert/code-signing-software-trust-action@cb502242630f8556eb815a4f9c1e8c64d2a2d2a3 # v1.0.0
       env:
         SM_HOST: ${{ vars.SM_HOST }}
@@ -356,7 +383,7 @@ jobs:
         SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
 
     - name: smctl diagnostics
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags'))
+      if: github.repository == 'Eugeny/tabby' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
       shell: powershell
       env:
         SM_LOG_LEVEL: TRACE
@@ -444,12 +471,12 @@ jobs:
 
     - name: Build packages without signing
       run: node scripts/build-windows.mjs
-      if: "! (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags')))"
+      if: github.repository != 'Eugeny/tabby' || github.event_name != 'push' || !startsWith(github.ref, 'refs/tags')
       env:
         ARCH: ${{matrix.arch}}
 
     - name: Build and sign packages
-      if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags'))
+      if: github.repository == 'Eugeny/tabby' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
       shell: powershell
       run: |
         Get-FileHash $env:SM_CLIENT_CERT_FILE -Algorithm MD5
@@ -486,6 +513,7 @@ jobs:
         # DEBUG: electron-builder,electron-builder:*
 
     - name: Upload symbols
+      if: github.repository == 'Eugeny/tabby'
       run: |
         npm install @sentry/cli
         node scripts/sentry-upload.mjs
@@ -537,14 +565,47 @@ jobs:
         mkdir artifact-portable
         mv dist/*-portable-*.zip artifact-portable/
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload installer
       with:
         name: Windows installer (${{matrix.arch}})
         path: artifact-setup
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       name: Upload portable build
       with:
         name: Windows portable build (${{matrix.arch}})
         path: artifact-portable
+
+  release:
+    name: Publish fork prerelease
+    needs: [macOS-Build, Linux-Build, Windows-Build]
+    if: github.repository == 'Hk-Gosuto/tabby' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: actions/download-artifact@v4
+      with:
+        path: release-assets
+    - name: Prepare assets and checksums
+      shell: bash
+      run: |
+        mkdir release-upload
+        find release-assets -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.AppImage' -o -name '*.pacman' \) -exec cp -n {} release-upload/ \;
+        cp docs/macos-touchid-security.md release-upload/SECURITY-NOTES.md
+        for info in release-assets/macOS\ build\ information*/TOUCHID-BUILD-INFO.txt; do
+          cat "$info" >> release-upload/MACOS-BUILD-INFO.txt
+        done
+        cd release-upload
+        sha256sum * > SHA256SUMS.txt
+    - name: Publish release with all assets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
+      shell: bash
+      run: |
+        gh release create "v$TABBY_VERSION" release-upload/* --target "$GITHUB_SHA" --prerelease --title "Tabby Touch ID $TABBY_VERSION" --notes-file docs/touchid-release-notes.md

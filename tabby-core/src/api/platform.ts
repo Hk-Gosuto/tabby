@@ -267,21 +267,16 @@ export abstract class PlatformService {
         return false
     }
 
-    /**
-     * Resolves once the user has been verified with Touch ID, rejects if they cancel
-     */
-    async promptBiometricAuth (reason: string): Promise<void> {
+    /** The OS must require current-set biometrics when reading this Keychain item. */
+    async storeBiometricPassphrase (passphrase: string, expireDays: number, expireOnRestart: boolean): Promise<void> {
         throw new Error('Not implemented')
     }
 
-    /**
-     * Encrypts a secret with a key held by the OS (the macOS Keychain), so that only this app can decrypt it
-     */
-    async encryptSecret (secret: string): Promise<string> {
+    async unlockBiometricPassphrase (): Promise<string> {
         throw new Error('Not implemented')
     }
 
-    async decryptSecret (encrypted: string): Promise<string> {
+    async forgetBiometricPassphrase (): Promise<void> {
         throw new Error('Not implemented')
     }
 

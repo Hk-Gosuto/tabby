@@ -46,22 +46,28 @@ export class VaultSettingsTabComponent extends BaseComponent {
     }
 
     async toggleTouchId (enabled: boolean): Promise<void> {
-        if (!enabled) {
-            this.biometrics.disable()
-            return
-        }
         try {
+            if (!enabled) {
+                await this.biometrics.disable()
+                return
+            }
             await this.vault.enableBiometricUnlock()
         } catch (e) {
-            this.touchIdEnabled = false
+            this.touchIdEnabled = this.biometrics.getSettings().enabled
             console.error('Failed to enable Touch ID:', e)
             this.notifications.error(this.translate.instant('Failed to enable Touch ID'), e.message)
         }
     }
 
-    setTouchIdExpiry (): void {
-        this.biometrics.setExpiry(this.touchIdExpireDays, this.touchIdExpireOnRestart)
-        this.touchIdExpireDays = this.biometrics.getSettings().expireDays
+    async setTouchIdExpiry (): Promise<void> {
+        try {
+            await this.biometrics.setExpiry(this.touchIdExpireDays, this.touchIdExpireOnRestart)
+        } catch {
+            this.notifications.error(this.translate.instant('Could not update Touch ID settings'))
+        }
+        const settings = this.biometrics.getSettings()
+        this.touchIdExpireDays = settings.expireDays
+        this.touchIdExpireOnRestart = settings.expireOnRestart
     }
 
     async loadVault (): Promise<void> {

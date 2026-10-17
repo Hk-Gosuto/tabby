@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { App, IpcRenderer, Shell, Dialog, Clipboard, GlobalShortcut, Screen, AutoUpdater, TouchBar, BrowserWindow, Menu, MenuItem, PowerSaveBlocker, NativeTheme, SystemPreferences } from 'electron'
+import { App, IpcRenderer, Shell, Dialog, Clipboard, GlobalShortcut, Screen, AutoUpdater, TouchBar, BrowserWindow, Menu, MenuItem, PowerSaveBlocker, NativeTheme } from 'electron'
 import * as remote from '@electron/remote'
 
 export interface MessageBoxResponse {
@@ -24,7 +24,6 @@ export class ElectronService {
     BrowserWindow: typeof BrowserWindow
     Menu: typeof Menu
     MenuItem: typeof MenuItem
-    systemPreferences: SystemPreferences
 
     /** @hidden */
     private constructor () {
@@ -45,6 +44,5 @@ export class ElectronService {
         this.Menu = remote.Menu
         this.MenuItem = remote.MenuItem
         this.nativeTheme = remote.nativeTheme
-        this.systemPreferences = remote.systemPreferences
     }
 }

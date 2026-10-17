@@ -50,3 +50,7 @@ if (process.platform === 'win32') {
         stdio: 'inherit',
     })
 }
+
+if (process.platform === 'darwin') {
+    execFileSync(process.execPath, [path.resolve(__dirname, 'build-vault-keychain.mjs')], { stdio: 'inherit' })
+}

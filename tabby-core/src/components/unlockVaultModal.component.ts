@@ -36,7 +36,7 @@ export class UnlockVaultModalComponent {
         }
 
         setTimeout(() => {
-            this.input.nativeElement.focus()
+            this.input?.nativeElement.focus()
         })
     }
 

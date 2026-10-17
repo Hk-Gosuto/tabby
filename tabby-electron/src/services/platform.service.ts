@@ -374,21 +374,30 @@ export class ElectronPlatformService extends PlatformService {
     }
 
     async isBiometricAuthAvailable (): Promise<boolean> {
-        // Not checking safeStorage.isEncryptionAvailable() here, on macOS it already accesses the Keychain
-        return this.hostApp.platform === Platform.macOS && this.electron.systemPreferences.canPromptTouchID()
+        if (this.hostApp.platform !== Platform.macOS) {
+            return false
+        }
+        try {
+            return await this.electron.ipcRenderer.invoke('app:vault-biometric-available')
+        } catch {
+            return false
+        }
     }
 
-    async promptBiometricAuth (reason: string): Promise<void> {
-        await this.electron.systemPreferences.promptTouchID(reason)
+    async storeBiometricPassphrase (passphrase: string, expireDays: number, expireOnRestart: boolean): Promise<void> {
+        await this.electron.ipcRenderer.invoke('app:vault-biometric-store', { passphrase, expireDays, expireOnRestart })
     }
 
-    async encryptSecret (secret: string): Promise<string> {
-        return this.electron.ipcRenderer.invoke('app:safe-storage-encrypt', secret)
+    async unlockBiometricPassphrase (): Promise<string> {
+        return this.electron.ipcRenderer.invoke('app:vault-biometric-unlock')
     }
 
-    async decryptSecret (encrypted: string): Promise<string> {
-        return this.electron.ipcRenderer.invoke('app:safe-storage-decrypt', encrypted)
+    async forgetBiometricPassphrase (): Promise<void> {
+        if (this.hostApp.platform === Platform.macOS) {
+            await this.electron.ipcRenderer.invoke('app:vault-biometric-forget')
+        }
     }
+
 }
 
 class ElectronFileUpload extends FileUpload {

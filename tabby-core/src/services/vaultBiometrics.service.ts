@@ -1,6 +1,5 @@
 import * as os from 'os'
 import { Injectable } from '@angular/core'
-import { TranslateService } from '@ngx-translate/core'
 import { PlatformService } from '../api/platform'
 
 export interface VaultBiometricsSettings {
@@ -12,8 +11,8 @@ export interface VaultBiometricsSettings {
 }
 
 interface StoredPassphrase {
-    /** Encrypted with {@link PlatformService.encryptSecret} */
-    encrypted: string
+    /** Metadata only. The passphrase and enforced expiry live in the protected Keychain item. */
+    version: 2
     /** When the user entered the passphrase */
     enteredAt: number
     /** When the computer booted, as of {@link enteredAt} */
@@ -39,7 +38,7 @@ function clampExpireDays (days: number): number {
 }
 
 /**
- * Keeps the vault passphrase encrypted by the OS so that the vault can be unlocked with Touch ID,
+ * Keeps only cache metadata here; the passphrase is stored in a biometrically protected Keychain item,
  * until the passphrase has to be entered again
  */
 @Injectable({ providedIn: 'root' })
@@ -47,7 +46,6 @@ export class VaultBiometricsService {
     /** @hidden */
     private constructor (
         private platform: PlatformService,
-        private translate: TranslateService,
     ) { }
 
     async isAvailable (): Promise<boolean> {
@@ -59,7 +57,9 @@ export class VaultBiometricsService {
         return { enabled, expireDays, expireOnRestart }
     }
 
-    setExpiry (expireDays: number, expireOnRestart: boolean): void {
+    async setExpiry (expireDays: number, expireOnRestart: boolean): Promise<void> {
+        // Policy changes invalidate the cache; editable UI metadata must never extend it.
+        await this.forgetPassphrase()
         this.save({ ...this.load(), expireDays: clampExpireDays(expireDays), expireOnRestart })
     }
 
@@ -72,7 +72,8 @@ export class VaultBiometricsService {
             return false
         }
         if (this.isExpired(state.passphrase, state)) {
-            this.forgetPassphrase()
+            // UI hint only; native code independently enforces the protected expiry.
+            this.save({ ...state, passphrase: undefined })
             return false
         }
         return true
@@ -85,27 +86,29 @@ export class VaultBiometricsService {
         if (!this.canUnlock()) {
             throw new Error('Touch ID unlock is not available')
         }
-        const { encrypted } = this.load().passphrase!
-        await this.platform.promptBiometricAuth(this.translate.instant('unlock the vault'))
         try {
-            return await this.platform.decryptSecret(encrypted)
+            return await this.platform.unlockBiometricPassphrase()
         } catch (error) {
-            console.warn('Could not decrypt the passphrase stored for Touch ID:', error)
-            this.forgetPassphrase()
-            throw new Error(this.translate.instant('Could not retrieve passphrase'))
+            // Cancellation leaves a valid entry usable; native expiry and missing-item
+            // errors require manual re-enrollment. No generic decryption fallback.
+            if (/expired|enabled again/.test(error.message)) {
+                await this.forgetPassphrase()
+            }
+            throw error
         }
     }
 
-    /**
-     * Turns Touch ID unlock on once the user confirms with Touch ID
-     */
+    /** Store a new item whose read access is enforced by the OS, not a JS prompt. */
     async enable (passphrase: string): Promise<void> {
-        await this.platform.promptBiometricAuth(this.translate.instant('enable Touch ID for the vault'))
-        const stored = await this.encryptPassphrase(passphrase)
-        this.save({ ...this.load(), enabled: true, passphrase: stored })
+        const settings = this.load()
+        const stored = await this.storeProtectedPassphrase(passphrase)
+        this.save({ ...settings, enabled: true, passphrase: stored })
     }
 
-    disable (): void {
+    async disable (): Promise<void> {
+        if (this.load().enabled) {
+            await this.platform.forgetBiometricPassphrase()
+        }
         this.save({ ...this.load(), enabled: false, passphrase: undefined })
     }
 
@@ -117,11 +120,20 @@ export class VaultBiometricsService {
         if (!this.load().enabled) {
             return
         }
-        const stored = await this.encryptPassphrase(passphrase).catch(error => {
+        const stored = await this.storeProtectedPassphrase(passphrase).catch(() => {
             // Discard the previous passphrase anyway, it may be outdated
-            console.warn('Could not store the passphrase for Touch ID:', error)
+            console.warn('Could not store the passphrase for Touch ID')
             return undefined
         })
+        if (!stored) {
+            try {
+                await this.forgetPassphrase()
+            } catch {
+                // Cache errors must not prevent a correct master passphrase from
+                // opening the vault. Do not claim native deletion succeeded.
+                console.warn('Could not remove the previous protected vault cache')
+            }
+        }
         const state = this.load()
         // Touch ID unlock might have been disabled in the meantime
         if (state.enabled) {
@@ -132,7 +144,8 @@ export class VaultBiometricsService {
     /**
      * Discards the stored passphrase so that it has to be entered again
      */
-    forgetPassphrase (): void {
+    async forgetPassphrase (): Promise<void> {
+        await this.platform.forgetBiometricPassphrase()
         this.save({ ...this.load(), passphrase: undefined })
     }
 
@@ -144,19 +157,26 @@ export class VaultBiometricsService {
         return settings.expireOnRestart && Math.abs(getBootTime() - passphrase.bootTime) > BOOT_TIME_TOLERANCE
     }
 
-    private async encryptPassphrase (passphrase: string): Promise<StoredPassphrase> {
-        return {
-            encrypted: await this.platform.encryptSecret(passphrase),
-            enteredAt: Date.now(),
-            bootTime: getBootTime(),
-        }
+    private async storeProtectedPassphrase (passphrase: string): Promise<StoredPassphrase> {
+        const settings = this.load()
+        await this.platform.storeBiometricPassphrase(passphrase, settings.expireDays, settings.expireOnRestart)
+        return { version: 2, enteredAt: Date.now(), bootTime: getBootTime() }
     }
 
     private load (): VaultBiometricsState {
         let state: Partial<VaultBiometricsState> = {}
         try {
-            state = JSON.parse(window.localStorage[STORAGE_KEY] ?? '{}')
+            const parsed = JSON.parse(window.localStorage[STORAGE_KEY] ?? '{}')
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                state = parsed
+            }
         } catch { }
+        // Never migrate the old safeStorage ciphertext by decrypting it silently.
+        // Drop it and require the master passphrase to enroll a protected item.
+        if (state.passphrase && (typeof state.passphrase !== 'object' || state.passphrase.version !== 2 || 'encrypted' in state.passphrase)) {
+            state.passphrase = undefined
+            window.localStorage[STORAGE_KEY] = JSON.stringify(state)
+        }
         return {
             enabled: state.enabled ?? false,
             expireDays: clampExpireDays(state.expireDays ?? 1),
