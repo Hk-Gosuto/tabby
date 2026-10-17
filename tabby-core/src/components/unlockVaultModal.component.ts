@@ -13,7 +13,7 @@ export class UnlockVaultModalComponent {
     touchIdEnabled = false
     canUseTouchId = false
     touchIdError = ''
-    @ViewChild('input') input: ElementRef
+    @ViewChild('input') input?: ElementRef
 
     constructor (
         private modalInstance: NgbActiveModal,

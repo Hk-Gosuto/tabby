@@ -1,7 +1,7 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 export interface ProtectedVaultBinding {
-    request (operation: string, input: string): Promise<string>
+    request: (operation: string, input: string) => Promise<string>
 }
 
 /** Only the main frame of a known Tabby window may request a vault operation. */

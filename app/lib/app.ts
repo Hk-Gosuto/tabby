@@ -39,7 +39,7 @@ export class Application {
             this.broadcastExcept('host:config-change', event.sender, config)
         })
 
-        let vaultBinding: ProtectedVaultBinding | undefined
+        let vaultBinding: ProtectedVaultBinding | undefined = undefined
         registerVaultBiometrics(ipcMain, event => this.windows.some(w => w.webContents === event.sender), () => {
             if (process.platform !== 'darwin') {
                 throw new Error('Protected Touch ID unlock is only available on macOS')

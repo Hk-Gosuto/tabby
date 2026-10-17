@@ -29,6 +29,16 @@ const DAY = 24 * 60 * 60 * 1000
 // Allows for clock adjustments - a restart moves the boot time much further
 const BOOT_TIME_TOLERANCE = 60 * 1000
 
+function isStoredPassphrase (value: unknown): value is StoredPassphrase {
+    if (!value || typeof value !== 'object') {
+        return false
+    }
+    const item = value as Record<string, unknown>
+    return item.version === 2 && !('encrypted' in item) &&
+        typeof item.enteredAt === 'number' && Number.isFinite(item.enteredAt) &&
+        typeof item.bootTime === 'number' && Number.isFinite(item.bootTime)
+}
+
 function getBootTime (): number {
     return Date.now() - os.uptime() * 1000
 }
@@ -173,7 +183,7 @@ export class VaultBiometricsService {
         } catch { }
         // Never migrate the old safeStorage ciphertext by decrypting it silently.
         // Drop it and require the master passphrase to enroll a protected item.
-        if (state.passphrase && (typeof state.passphrase !== 'object' || state.passphrase.version !== 2 || 'encrypted' in state.passphrase)) {
+        if (state.passphrase && !isStoredPassphrase(state.passphrase)) {
             state.passphrase = undefined
             window.localStorage[STORAGE_KEY] = JSON.stringify(state)
         }
