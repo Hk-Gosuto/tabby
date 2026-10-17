@@ -17,9 +17,13 @@ export function registerVaultBiometrics (
         }
         busy = true
         return Promise.resolve().then(async () => {
-            const result = await getBinding().request(operation, JSON.stringify(input))
-            return JSON.parse(result)
-        }).finally(() => { busy = false })
+            try {
+                const result = await getBinding().request(operation, JSON.stringify(input))
+                return JSON.parse(result)
+            } finally {
+                busy = false
+            }
+        })
     }
     for (const operation of ['available', 'store', 'unlock', 'forget']) {
         ipc.handle(`app:vault-biometric-${operation}`, async (event, input) => {

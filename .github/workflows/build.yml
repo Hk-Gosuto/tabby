@@ -3,7 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: [master, fix/macos-touchid-keychain]
-  pull_request:
 
 permissions:
   contents: read
