@@ -7,14 +7,15 @@
 #include <algorithm>
 #include "policy.h"
 
-// No general-purpose decrypt API, no safeStorage fallback and no password fallback.
-// The OS enforces biometryCurrentSet on EVERY read, even if IPC is invoked directly.
+// Ordinary file-based Keychain for unsigned/ad-hoc build compatibility.
+// Native operations authenticate before reading; this is application-enforced,
+// not a biometric ACL on the Keychain item. No general-purpose decrypt API.
 static NSDictionary *query() {
     return @{
         (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
-        (__bridge id)kSecAttrService: @"org.tabby.vault.touchid.v2",
+        (__bridge id)kSecAttrService: @"org.tabby.vault.touchid.login.v1",
         (__bridge id)kSecAttrAccount: @"master-passphrase",
-        (__bridge id)kSecUseDataProtectionKeychain: @YES,
+        (__bridge id)kSecUseDataProtectionKeychain: @NO,
         (__bridge id)kSecAttrSynchronizable: @NO,
     };
 }
@@ -48,12 +49,37 @@ static void failStatus(Job *job, OSStatus status) {
         fail(job, "AUTH_REQUIRED", "Touch ID was cancelled, failed, or is not available. Enter the master passphrase.");
     } else if (status == errSecItemNotFound) {
         fail(job, "CACHE_MISSING", "Touch ID must be enabled again with the master passphrase.");
-    } else if (status == errSecMissingEntitlement) {
-        fail(job, "SIGNING_REQUIRED", "This build needs valid Apple signing and Keychain entitlements. Use the master passphrase.");
     } else {
         // Do not include request payloads, Keychain data, or native errors in logs.
         fail(job, "KEYCHAIN_ERROR", "The protected Keychain operation failed. Use the master passphrase.");
     }
+}
+
+// The same native guard is used by enrollment and unlock. A diagnostic no-UI
+// request can never authorize a read, including when a valid item exists.
+static bool authenticate(Job *job, NSString *reason) {
+    if (job->noUI) {
+        fail(job, "AUTH_REQUIRED", "Touch ID was cancelled, failed, or is not available. Enter the master passphrase.");
+        return false;
+    }
+    LAContext *context = [LAContext new];
+    context.localizedFallbackTitle = @"";
+    context.touchIDAuthenticationAllowableReuseDuration = 0;
+    NSError *error = nil;
+    if (![context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:&error]) {
+        [context invalidate];
+        fail(job, "AUTH_REQUIRED", "Touch ID was cancelled, failed, or is not available. Enter the master passphrase.");
+        return false;
+    }
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    __block BOOL consent = NO;
+    [context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+            localizedReason:reason
+                      reply:^(BOOL success, NSError *error) { (void)error; consent = success; dispatch_semaphore_signal(done); }];
+    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+    [context invalidate];
+    if (!consent) fail(job, "AUTH_REQUIRED", "Touch ID was cancelled, failed, or is not available. Enter the master passphrase.");
+    return consent;
 }
 
 static void execute(napi_env, void *data) {
@@ -63,7 +89,7 @@ static void execute(napi_env, void *data) {
             if (job->operation == "available") {
                 LAContext *context = [LAContext new];
                 NSError *error = nil;
-                // Capability only. Store/read still fail closed if signing is unsuitable.
+                // Hardware capability; ordinary Keychain requires no access-group entitlement.
                 job->output = [context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:&error] ? "true" : "false";
                 return;
             }
@@ -73,12 +99,6 @@ static void execute(napi_env, void *data) {
                 job->output = "null";
                 return;
             }
-
-            LAContext *context = [LAContext new];
-            context.localizedReason = @"Unlock the Tabby vault";
-            context.localizedFallbackTitle = @"";
-            context.touchIDAuthenticationAllowableReuseDuration = 0;
-            context.interactionNotAllowed = job->noUI;
 
             if (job->operation == "store") {
                 NSData *input = [NSData dataWithBytes:job->input.data() length:job->input.size()];
@@ -96,16 +116,7 @@ static void execute(napi_env, void *data) {
                     fail(job, "INVALID_REQUEST", "Invalid protected vault expiry."); return;
                 }
 
-                // Enrollment requires explicit biometric consent. This is additional to,
-                // and never a substitute for, the OS-enforced ACL on subsequent reads.
-                dispatch_semaphore_t done = dispatch_semaphore_create(0);
-                __block BOOL consent = NO;
-                [context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
-                        localizedReason:@"Enable Touch ID for the Tabby vault"
-                                  reply:^(BOOL success, NSError *error) { (void)error; consent = success; dispatch_semaphore_signal(done); }];
-                dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
-                [context invalidate];
-                if (!consent) { fail(job, "AUTH_REQUIRED", "Touch ID enrollment was cancelled or failed."); return; }
+                if (!authenticate(job, @"Enable Touch ID for the Tabby vault")) return;
 
                 double now = NSDate.date.timeIntervalSince1970;
                 NSDictionary *record = @{
@@ -115,19 +126,16 @@ static void execute(napi_env, void *data) {
                     @"expireOnRestart": @([request[@"expireOnRestart"] boolValue]),
                 };
                 NSData *encoded = [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
-                CFErrorRef error = nullptr;
-                SecAccessControlRef access = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
-                    kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecAccessControlBiometryCurrentSet, &error);
-                if (!access) {
-                    if (error) CFRelease(error);
-                    fail(job, "KEYCHAIN_ERROR", "Could not create biometric Keychain access control."); return;
-                }
+                // nil trusts only the creating application, not every application.
+                // Ordinary Keychain may ask again after an ad-hoc binary changes.
+                SecAccessRef access = nullptr;
+                OSStatus status = SecAccessCreate(CFSTR("Tabby vault"), nullptr, &access);
+                if (status != errSecSuccess) { failStatus(job, status); return; }
                 NSMutableDictionary *attributes = [query() mutableCopy];
-                attributes[(__bridge id)kSecAttrAccessControl] = (__bridge id)access;
+                attributes[(__bridge id)kSecAttrAccess] = (__bridge id)access;
                 attributes[(__bridge id)kSecValueData] = encoded;
-                attributes[(__bridge id)kSecAttrLabel] = @"Tabby vault (Touch ID required)";
-                // Never update an old item's access-control attributes in place.
-                OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query());
+                attributes[(__bridge id)kSecAttrLabel] = @"Tabby vault (Touch ID in app)";
+                status = SecItemDelete((__bridge CFDictionaryRef)query());
                 if (status == errSecSuccess || status == errSecItemNotFound) {
                     status = SecItemAdd((__bridge CFDictionaryRef)attributes, nullptr);
                 }
@@ -138,13 +146,12 @@ static void execute(napi_env, void *data) {
             }
 
             if (job->operation != "unlock") { fail(job, "INVALID_REQUEST", "Unknown vault operation."); return; }
+            if (!authenticate(job, @"Unlock the Tabby vault")) return;
             NSMutableDictionary *read = [query() mutableCopy];
             read[(__bridge id)kSecReturnData] = @YES;
             read[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
-            read[(__bridge id)kSecUseAuthenticationContext] = context;
             CFTypeRef result = nullptr;
             OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)read, &result);
-            [context invalidate];
             if (status != errSecSuccess) { if (result) CFRelease(result); failStatus(job, status); return; }
             NSData *encoded = CFBridgingRelease(result);
             NSDictionary *record = [NSJSONSerialization JSONObjectWithData:encoded options:0 error:nil];

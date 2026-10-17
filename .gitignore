@@ -42,5 +42,3 @@ crowdin.yml
 extras/UAC.exe
 
 app/native/*.node
-build/mac/touchid-entitlements.plist
-build/mac/touchid.provisionprofile

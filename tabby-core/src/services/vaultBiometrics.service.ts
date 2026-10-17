@@ -11,7 +11,7 @@ export interface VaultBiometricsSettings {
 }
 
 interface StoredPassphrase {
-    /** Metadata only. The passphrase and enforced expiry live in the protected Keychain item. */
+    /** Metadata only. The passphrase and enforced expiry live in the ordinary Keychain item. */
     version: 2
     /** When the user entered the passphrase */
     enteredAt: number
@@ -48,7 +48,7 @@ function clampExpireDays (days: number): number {
 }
 
 /**
- * Keeps only cache metadata here; the passphrase is stored in a biometrically protected Keychain item,
+ * Keeps only cache metadata here; the passphrase is stored in a biometrically ordinary Keychain item,
  * until the passphrase has to be entered again
  */
 @Injectable({ providedIn: 'root' })
@@ -126,7 +126,7 @@ export class VaultBiometricsService {
         }
     }
 
-    /** Store a new item whose read access is enforced by the OS, not a JS prompt. */
+    /** Native code verifies Touch ID before storing or reading the ordinary item. */
     async enable (passphrase: string): Promise<void> {
         const settings = this.load()
         const stored = await this.storeProtectedPassphrase(passphrase)

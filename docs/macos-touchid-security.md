@@ -1,102 +1,78 @@
-# Experimental Touch ID fork
+# Touch ID with the ordinary macOS Keychain
 
-This fork integrates Eugeny/tabby PR #10973 (head `9826482`) onto upstream
-`467ce8e`, replacing its independent Touch ID prompt + safeStorage decryption
-with a native, OS-enforced Keychain read. It is not an official Tabby release
-or a completed independent security audit.
+This community fork integrates Eugeny/tabby PR #10973. It uses the traditional
+file-based Keychain (normally the user's login keychain), so the Touch ID feature
+does not require Data Protection Keychain access-group entitlements or a
+Developer ID certificate.
 
-## Security changes
+## Unlock flow and security boundary
 
-- The native N-API module stores the master passphrase directly in the macOS
-  Data Protection Keychain. Its ACL uses `biometryCurrentSet` with
-  `WhenUnlockedThisDeviceOnly`; it does not synchronize to iCloud.
-- Every read uses a new LAContext with biometric reuse disabled. Adding or
-  removing fingerprints invalidates access. There is no OS-password fallback;
-  the original Tabby master-passphrase dialog remains available.
-- Removed the general safeStorage encrypt/decrypt IPC endpoints. Direct calls
-  to the native unlock endpoint still require OS biometric authorization.
-- Expiration policy and the boot-session identifier are inside the protected
-  item. The native reader checks them before returning the passphrase. A
-  monotonic uptime check prevents wall-clock rollback from extending the cache
-  in the same boot session. This is not a trusted-time protocol against an
-  administrator manipulating time across restarts.
-- Renderer localStorage contains UI metadata only. Old safeStorage ciphertext
-  is discarded without attempting to decrypt it. Changing expiration policy
-  invalidates the native cache and requires re-enrollment.
-- IPC is restricted to known Tabby main frames and serialized to avoid
-  overlapping biometric operations. Inputs are bounded and item identifiers
-  cannot be selected by the caller. No passphrase is sent as a command argument,
-  written to a temporary file, logged, or included in build artifacts.
+- The master passphrase and expiry record are stored in an ordinary Keychain
+  generic-password item. They are not stored in localStorage or a temporary file.
+- The native main-process module performs a fresh biometric-only LocalAuthentication
+  check before enrollment AND before each read. Cancellation or failure returns
+  no passphrase. There is no OS-password fallback in that biometric check.
+- This is **application-enforced Touch ID**, not a biometric ACL attached to the
+  Keychain item. Other code authorized by the item's ordinary Keychain ACL may
+  read it without our biometric check. Code executing as trusted Tabby code,
+  malicious plugins, or a compromised process can bypass this application policy.
+- The ordinary item's sensitive-operation ACL initially trusts only the creating
+  app, using SecAccessCreate with a null trusted-app list. It does not allow all
+  applications. macOS may display a separate Keychain permission/password prompt,
+  especially after an ad-hoc-signed build changes identity during an upgrade.
+- No general safeStorage encrypt/decrypt IPC exists. Vault IPC accepts only known
+  Tabby main frames, validates bounded input, and serializes native operations.
+- Native reads enforce expiry and optional boot-session invalidation. Same-boot
+  monotonic uptime limits wall-clock rollback. This is application policy, not a
+  trusted-time protocol against an administrator manipulating the machine.
+- Fingerprint changes do not automatically invalidate an ordinary Keychain item.
+  The next unlock still requires a currently enrolled fingerprint. This build
+  makes no biometryCurrentSet invalidation guarantee.
+- Secrets may remain in V8/Foundation memory after authorization. This feature
+  does not protect an unlocked app against trusted malicious plugins.
 
-Tabby's plugins execute trusted application code. Once the user authorizes a
-read, or types the master passphrase, that process receives plaintext; this
-change does not isolate secrets from malicious plugins in an unlocked app.
-V8/Foundation may retain copies in memory until garbage collection. Expired or
-disabled caches cannot revoke old backups that already contain secrets.
+The service identifier is org.tabby.vault.touchid.login.v1. Existing safeStorage
+ciphertext is discarded without decrypting it. Previous Data Protection Keychain
+items are not silently migrated or read. Enter the master passphrase to enroll
+this new ordinary Keychain item; an older protected item may be removed manually
+using Keychain Access if desired.
 
-## Builds and signing
+## Compatibility and distribution
 
-The build retains upstream's application name (`Tabby`), bundle ID (`org.tabby`),
-URL scheme, configuration/plugin directories and automatic updater behavior.
-It uses the existing Tabby configuration. Back it up before installing this build.
+Application name (Tabby), bundle ID (org.tabby), URL scheme, configuration/plugin
+directories, and updater behavior retain upstream defaults. Back up the existing
+configuration before installing.
 
-The workflow builds macOS arm64/x86_64, Windows x64/arm64, and Linux
-x64/arm64/armv7l using upstream's package pipeline. It publishes a prerelease
-with the resulting assets and SHA-256 checksums only after every build succeeds.
+Actions builds macOS arm64/x86_64, Windows x64/arm64, and Linux x64/arm64/armv7l.
+Successful packages, build information, and SHA-256 checksums are attached to a
+prerelease after all build jobs pass.
 
-Without signing secrets the workflow uses ad-hoc signing and disables Hardened
-Runtime for that experimental package, so Electron/native modules can load
-without claiming a Developer ID identity. A signed build enables Hardened
-Runtime. Bundle signatures and the packaged native module are checked before
-creating the DMG/ZIP.
+Without signing secrets macOS packages use ad-hoc signing with Hardened Runtime
+disabled for native-module compatibility. They do not establish publisher identity
+and are not notarized. Optional Developer ID signing uses CSC_LINK and
+CSC_KEY_PASSWORD; optional notarization also uses APPLE_TEAM_ID,
+APPSTORE_USERNAME and APPSTORE_PASSWORD. There is no Touch-ID-specific provisioning
+profile or Keychain access-group requirement for this ordinary-Keychain backend.
 
-An ad-hoc/unsigned macOS package is **not sufficient to guarantee Data Protection
-Keychain access**. Native Keychain failure never falls back to weaker storage.
-The master passphrase continues to work. To enable protected Touch ID, supply
-valid Apple signing material as repository Actions secrets:
+## Validation and limitations
 
-- `CSC_LINK`: base64 PKCS#12 signing certificate (private key included).
-- `CSC_KEY_PASSWORD`: its password.
-- `APPLE_TEAM_ID`: the matching ten-character team ID.
-- `MACOS_PROVISION_PROFILE`: base64 provisioning profile authorizing
-  `<TEAM_ID>.org.tabby` and the matching Keychain access group,
-  when required by that signing identity.
-- Optional notarization: `APPSTORE_USERNAME`, `APPSTORE_PASSWORD`.
+CI checks native compilation/loading on both Mac architectures, no-UI enrollment
+and read denial, IPC rejection and serialization, cache metadata and failure
+handling, expiry policy, existing tests, declarations, lint, and packaged Mac
+startup/version output. CI cannot supply a real finger or prove positive-path
+Touch ID behavior.
 
-Never paste signing credentials into an issue or chat, or commit them.
-Verify that the signed executable has the expected application identifier,
-team identifier, Keychain group and valid provisioning before use. Different
-Apple identities/profiles may require adjusting the application identifier;
-the current helper deliberately uses one fixed ID.
+On a physical Mac, test with disposable credentials:
 
-```sh
-codesign --verify --deep --strict '/Applications/Tabby.app'
-codesign -d --entitlements :- '/Applications/Tabby.app'
-```
+1. Enable Touch ID, enter the correct master passphrase, and complete enrollment.
+2. Restart Tabby, unlock through Touch ID, and cancel another attempt; verify the
+   manual master passphrase remains usable.
+3. Change expiry settings and master passphrase; verify stale cache is not used.
+4. Test reboot expiry and disable Touch ID; verify the ordinary cache is removed.
+5. After upgrading an ad-hoc build, review any macOS Keychain authorization prompt.
+   Do not change the item to allow all applications.
 
-## Validation
-
-Automated checks cover untrusted-frame rejection, invalid enrollment requests,
-direct-IPC OS-denial propagation, serialization, expiry, wall-clock rollback and
-boot changes. macOS CI additionally compiles/loads the module and verifies that
-a read without UI cannot return a secret on a clean runner. This does **not**
-prove successful biometric access or all ACL behavior on real hardware.
-
-Before using important credentials, validate on a signed build and a physical Mac:
-
-1. Enable a test vault using a disposable master passphrase and enroll Touch ID.
-2. Restart Tabby and confirm Touch ID unlock works; cancel it and confirm the
-   vault remains locked and manual passphrase entry still works.
-3. Forget Tabby's in-memory passphrase and call the unlock endpoint directly;
-   confirm it still needs Touch ID. For a stronger native check, use a fresh
-   no-UI native read against an existing protected item and expect denial.
-4. Change fingerprints, expiry settings and the master passphrase; verify that
-   stale cached access is rejected. Test both boot-expiry settings.
-5. Disable Touch ID and confirm the native item is removed. Verify a build
-   lacking signing/entitlements cannot silently store or return the passphrase.
-
-Apple references:
+References:
 - https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains
-- https://developer.apple.com/documentation/security/ksecusedataprotectionkeychain
-- https://developer.apple.com/documentation/security/secaccesscontrolcreateflags/biometrycurrentset
-- https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps
+- https://developer.apple.com/documentation/security/secaccesscreate(_:_:_:)
+- https://developer.apple.com/documentation/localauthentication/lacontext/evaluatepolicy(_:localizedreason:reply:)

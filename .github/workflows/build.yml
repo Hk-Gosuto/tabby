@@ -118,12 +118,6 @@ jobs:
     - name: Check native Keychain module
       run: node scripts/test-vault-keychain-native.mjs
 
-    - name: Prepare optional signing
-      run: node scripts/prepare-touchid-signing.mjs
-      env:
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        MACOS_PROVISION_PROFILE: ${{ secrets.MACOS_PROVISION_PROFILE }}
-
     - name: Webpack
       run: yarn run build
 
