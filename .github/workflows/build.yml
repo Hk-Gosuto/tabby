@@ -147,6 +147,9 @@ jobs:
         APPSTORE_PASSWORD: ${{ secrets.APPSTORE_PASSWORD }}
         USE_HARD_LINKS: false
 
+    - name: Verify packaged app starts and reports its version
+      run: node scripts/test-packaged-macos.mjs
+
     - name: Record macOS build information
       run: node scripts/touchid-build-info.mjs
       env:
