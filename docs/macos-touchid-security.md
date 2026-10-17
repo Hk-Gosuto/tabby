@@ -45,6 +45,12 @@ The workflow builds macOS arm64/x86_64, Windows x64/arm64, and Linux
 x64/arm64/armv7l using upstream's package pipeline. It publishes a prerelease
 with the resulting assets and SHA-256 checksums only after every build succeeds.
 
+Without signing secrets the workflow uses ad-hoc signing and disables Hardened
+Runtime for that experimental package, so Electron/native modules can load
+without claiming a Developer ID identity. A signed build enables Hardened
+Runtime. Bundle signatures and the packaged native module are checked before
+creating the DMG/ZIP.
+
 An ad-hoc/unsigned macOS package is **not sufficient to guarantee Data Protection
 Keychain access**. Native Keychain failure never falls back to weaker storage.
 The master passphrase continues to work. To enable protected Touch ID, supply

@@ -4,6 +4,7 @@ import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
@@ -30,13 +31,23 @@ builder({
                 fs.copyFileSync(profile, path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents/embedded.provisionprofile'))
             }
         },
+        afterSign: async context => {
+            const bundle = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
+            execFileSync('codesign', ['--verify', '--deep', '--strict', bundle], { stdio: 'inherit' })
+            const native = path.join(bundle, 'Contents/Resources/app.asar.unpacked/native/vault-keychain.node')
+            if (!fs.existsSync(native)) {
+                throw new Error('The packaged app is missing its protected Keychain module')
+            }
+        },
         extraMetadata: {
             version: vars.version,
             teamId: process.env.APPLE_TEAM_ID,
         },
         forceCodeSigning: !!process.env.CSC_LINK,
         mac: {
-            identity: !process.env.CI || process.env.CSC_LINK ? undefined : null,
+            // Ad-hoc signatures keep test bundles internally valid on Apple Silicon.
+            identity: process.env.CSC_LINK ? undefined : '-',
+            hardenedRuntime: !!process.env.CSC_LINK,
             entitlements: fs.existsSync('build/mac/touchid-entitlements.plist') ? 'build/mac/touchid-entitlements.plist' : 'build/mac/entitlements.plist',
             notarize: !!(process.env.APPLE_TEAM_ID && process.env.APPSTORE_USERNAME && process.env.APPSTORE_PASSWORD),
         },

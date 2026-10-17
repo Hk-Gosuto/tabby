@@ -3,10 +3,11 @@ const info = `Tabby Touch ID experimental build
 Commit: ${process.env.GITHUB_SHA || 'local'}
 Architecture: ${process.env.ARCH || process.arch}
 Version: ${process.env.TABBY_VERSION || 'development'}
-Apple signing configured: ${process.env.APPLE_TEAM_ID ? 'yes (verify the installed app signature and entitlements)' : 'no'}
+Developer ID signing configured: ${process.env.APPLE_TEAM_ID ? 'yes (verify the installed app signature and entitlements)' : 'no'}
 
 This is a community fork, not an official Tabby release.
 No Apple signing secrets are included in artifacts.
+Ad-hoc test builds do not enable Hardened Runtime or establish publisher identity.
 Unsigned/ad-hoc builds can be used with the master passphrase. Protected Touch ID
 requires valid Apple signing and Keychain entitlements; it fails closed if these
 are unavailable. There is no fallback to safeStorage or an unprotected Keychain.
