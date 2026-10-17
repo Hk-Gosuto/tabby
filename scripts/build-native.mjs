@@ -20,7 +20,7 @@ for (let dir of ['app', 'tabby-core', 'tabby-local', 'tabby-ssh', 'tabby-termina
     const build = rebuild({
         buildPath: path.resolve(__dirname, '../' + dir),
         electronVersion: vars.electronVersion,
-        arch: process.env.ARCH,
+        arch: process.env.ARCH === 'x86_64' ? 'x64' : process.env.ARCH,
         force: true,
     })
     build.catch(e => {
@@ -49,4 +49,8 @@ if (process.platform === 'win32') {
         env: { ...process.env, npm_config_arch: process.env.ARCH },
         stdio: 'inherit',
     })
+}
+
+if (process.platform === 'darwin') {
+    execFileSync(process.execPath, [path.resolve(__dirname, 'build-vault-keychain.mjs')], { stdio: 'inherit' })
 }

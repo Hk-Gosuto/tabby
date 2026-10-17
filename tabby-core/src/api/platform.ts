@@ -260,6 +260,26 @@ export abstract class PlatformService {
         return 'dark'
     }
 
+    /**
+     * Whether the user can be verified with Touch ID
+     */
+    async isBiometricAuthAvailable (): Promise<boolean> {
+        return false
+    }
+
+    /** The OS must require current-set biometrics when reading this Keychain item. */
+    async storeBiometricPassphrase (passphrase: string, expireDays: number, expireOnRestart: boolean): Promise<void> {
+        throw new Error('Not implemented')
+    }
+
+    async unlockBiometricPassphrase (): Promise<string> {
+        throw new Error('Not implemented')
+    }
+
+    async forgetBiometricPassphrase (): Promise<void> {
+        throw new Error('Not implemented')
+    }
+
     abstract getOSRelease (): string
     abstract getAppVersion (): string
     abstract openExternal (url: string): Promise<void>

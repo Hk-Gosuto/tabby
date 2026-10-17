@@ -372,6 +372,32 @@ export class ElectronPlatformService extends PlatformService {
             return 'light'
         }
     }
+
+    async isBiometricAuthAvailable (): Promise<boolean> {
+        if (this.hostApp.platform !== Platform.macOS) {
+            return false
+        }
+        try {
+            return await this.electron.ipcRenderer.invoke('app:vault-biometric-available')
+        } catch {
+            return false
+        }
+    }
+
+    async storeBiometricPassphrase (passphrase: string, expireDays: number, expireOnRestart: boolean): Promise<void> {
+        await this.electron.ipcRenderer.invoke('app:vault-biometric-store', { passphrase, expireDays, expireOnRestart })
+    }
+
+    async unlockBiometricPassphrase (): Promise<string> {
+        return this.electron.ipcRenderer.invoke('app:vault-biometric-unlock')
+    }
+
+    async forgetBiometricPassphrase (): Promise<void> {
+        if (this.hostApp.platform === Platform.macOS) {
+            await this.electron.ipcRenderer.invoke('app:vault-biometric-forget')
+        }
+    }
+
 }
 
 class ElectronFileUpload extends FileUpload {

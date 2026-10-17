@@ -12,6 +12,7 @@ import { Window, WindowOptions } from './window'
 import { pluginManager } from './pluginManager'
 import { PTYManager } from './pty'
 import { logMainError } from './errors'
+import { registerVaultBiometrics, ProtectedVaultBinding } from './vaultBiometrics'
 
 export class Application {
     private tray?: Tray
@@ -36,6 +37,19 @@ export class Application {
         ipcMain.handle('app:save-config', async (event, config) => {
             await saveConfig(config)
             this.broadcastExcept('host:config-change', event.sender, config)
+        })
+
+        let vaultBinding: ProtectedVaultBinding | undefined = undefined
+        registerVaultBiometrics(ipcMain, event => this.windows.some(w => w.webContents === event.sender), () => {
+            if (process.platform !== 'darwin') {
+                throw new Error('Protected Touch ID unlock is only available on macOS')
+            }
+            if (!vaultBinding) {
+                const nativeModule = { exports: {} }
+                process.dlopen(nativeModule as any, path.join(app.getAppPath().replace(/\.asar$/, '.asar.unpacked'), 'native/vault-keychain.node'))
+                vaultBinding = nativeModule.exports as ProtectedVaultBinding
+            }
+            return vaultBinding
         })
 
         ipcMain.on('app:register-global-hotkey', (_event, specs) => {

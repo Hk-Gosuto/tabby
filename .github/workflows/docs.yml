@@ -3,7 +3,7 @@ on: push
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: github.repository == 'Eugeny/tabby' && github.actor != 'dependabot[bot]'
 
     steps:
     - name: Checkout

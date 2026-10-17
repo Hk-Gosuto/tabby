@@ -38,10 +38,10 @@ const application = new Application(configStore)
 // Register tabby:// URL scheme
 if (process.defaultApp) {
     if (process.argv.length >= 2) {
-        app.setAsDefaultProtocolClient('tabby', process.execPath, [process.argv[1]])
+        app.setAsDefaultProtocolClient('tabby-touchid', process.execPath, [process.argv[1]])
     }
 } else {
-    app.setAsDefaultProtocolClient('tabby')
+    app.setAsDefaultProtocolClient('tabby-touchid')
 }
 
 ipcMain.on('app:new-window', () => {

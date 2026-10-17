@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Component, HostBinding } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { BaseComponent, VaultService, VaultSecret, Vault, PlatformService, ConfigService, VAULT_SECRET_TYPE_FILE, PromptModalComponent, VaultFileSecret, TranslateService } from 'tabby-core'
+import { BaseComponent, VaultService, VaultSecret, Vault, PlatformService, ConfigService, VAULT_SECRET_TYPE_FILE, PromptModalComponent, VaultFileSecret, TranslateService, NotificationsService, VaultBiometricsService } from 'tabby-core'
 import { SetVaultPassphraseModalComponent } from './setVaultPassphraseModal.component'
 import { ShowSecretModalComponent } from './showSecretModal.component'
 
@@ -15,6 +15,10 @@ export class VaultSettingsTabComponent extends BaseComponent {
     vaultContents: Vault|null = null
     VAULT_SECRET_TYPE_FILE = VAULT_SECRET_TYPE_FILE
     searchTerm = ''
+    touchIdAvailable = false
+    touchIdEnabled = false
+    touchIdExpireDays = 1
+    touchIdExpireOnRestart = false
     @HostBinding('class.content-box') true
 
     constructor (
@@ -23,11 +27,47 @@ export class VaultSettingsTabComponent extends BaseComponent {
         private platform: PlatformService,
         private ngbModal: NgbModal,
         private translate: TranslateService,
+        private notifications: NotificationsService,
+        private biometrics: VaultBiometricsService,
     ) {
         super()
         if (vault.isOpen()) {
             this.loadVault()
         }
+        this.loadTouchIdSettings()
+    }
+
+    async loadTouchIdSettings (): Promise<void> {
+        const settings = this.biometrics.getSettings()
+        this.touchIdEnabled = settings.enabled
+        this.touchIdExpireDays = settings.expireDays
+        this.touchIdExpireOnRestart = settings.expireOnRestart
+        this.touchIdAvailable = await this.biometrics.isAvailable()
+    }
+
+    async toggleTouchId (enabled: boolean): Promise<void> {
+        try {
+            if (!enabled) {
+                await this.biometrics.disable()
+                return
+            }
+            await this.vault.enableBiometricUnlock()
+        } catch (e) {
+            this.touchIdEnabled = this.biometrics.getSettings().enabled
+            console.error('Failed to enable Touch ID:', e)
+            this.notifications.error(this.translate.instant('Failed to enable Touch ID'), e.message)
+        }
+    }
+
+    async setTouchIdExpiry (): Promise<void> {
+        try {
+            await this.biometrics.setExpiry(this.touchIdExpireDays, this.touchIdExpireOnRestart)
+        } catch {
+            this.notifications.error(this.translate.instant('Could not update Touch ID settings'))
+        }
+        const settings = this.biometrics.getSettings()
+        this.touchIdExpireDays = settings.expireDays
+        this.touchIdExpireOnRestart = settings.expireOnRestart
     }
 
     async loadVault (): Promise<void> {
@@ -64,6 +104,7 @@ export class VaultSettingsTabComponent extends BaseComponent {
             },
         )).response === 0) {
             await this.vault.setEnabled(false)
+            this.touchIdEnabled = false
         }
     }
 
@@ -77,7 +118,7 @@ export class VaultSettingsTabComponent extends BaseComponent {
         const modal = this.ngbModal.open(SetVaultPassphraseModalComponent)
         const newPassphrase = await modal.result.catch(() => null)
         if (newPassphrase) {
-            this.vault.save(this.vaultContents, newPassphrase)
+            await this.vault.save(this.vaultContents, newPassphrase)
         }
     }
 
