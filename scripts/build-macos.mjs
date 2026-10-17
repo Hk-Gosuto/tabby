@@ -6,6 +6,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
+// Missing Actions secrets arrive as empty strings; electron-builder otherwise
+// resolves an empty CSC_LINK to the repository directory and tries to import it.
+if (!process.env.CSC_LINK?.trim()) {
+    delete process.env.CSC_LINK
+}
+
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
 process.env.ARCH = process.env.ARCH || process.arch
